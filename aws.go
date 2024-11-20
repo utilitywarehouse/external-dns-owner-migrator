@@ -113,13 +113,18 @@ func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clien
 					newValues = append(newValues, r)
 				}
 			}
+			if len(newValues) == 0 {
+				continue
+			}
 			msg := fmt.Sprintf("Updating record: %s Type: %s with values: %s", *r.Name, string(r.Type), newValues)
 			if dryRun {
 				msg += " (dry run)"
 			}
 			fmt.Println(msg)
 			if !dryRun {
-				return modifyRoute53RecordValue(client, zoneID, &r, newValues)
+				if err := modifyRoute53RecordValue(client, zoneID, &r, newValues); err != nil {
+					log.Printf("Failed to update record: %v", err)
+				}
 			}
 		}
 	}
