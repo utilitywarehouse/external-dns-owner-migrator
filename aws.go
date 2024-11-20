@@ -82,13 +82,24 @@ func modifyRoute53RecordValue(client *route53.Client, zoneID string, record *typ
 	return nil
 }
 
-// sanitizeAWSRecordAddress accepts a string and makes sure that it ends in a
-// trailing dot to make sure hostnames comply with record names
-func sanitizeAWSRecordAddress(address string) string {
-	if !strings.HasSuffix(address, ".") {
-		return address + "."
+func deleteRoute53Record(client *route53.Client, zoneID string, record types.ResourceRecordSet) error {
+	change := types.Change{
+		Action:            types.ChangeActionDelete,
+		ResourceRecordSet: &record,
 	}
-	return address
+
+	input := &route53.ChangeResourceRecordSetsInput{
+		HostedZoneId: &zoneID,
+		ChangeBatch: &types.ChangeBatch{
+			Changes: []types.Change{change},
+		},
+	}
+
+	_, err := client.ChangeResourceRecordSets(context.TODO(), input)
+	if err != nil {
+		return fmt.Errorf("failed to delete record: %w", err)
+	}
+	return nil
 }
 
 func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clientset, prefix, oldOwner, newOwner, zoneID string, dryRun bool) error {
@@ -131,6 +142,78 @@ func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clien
 	return nil
 }
 
+func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes.Clientset, prefix, owner, zoneID string, dryRun bool) error {
+	ingressHostnames, err := allIngressHosts(kubeClient)
+	if err != nil {
+		return fmt.Errorf("Cannot list Ingresses: %v", err)
+	}
+
+	allRecords, err := route53RecordsList(client, zoneID)
+	if err != nil {
+		return fmt.Errorf("Cannot list records in aws zone with ID: %s, %v", zoneID, err)
+	}
+
+	toDeleteRecords := ownedRoute53RecordsList(allRecords, prefix, owner)
+	for _, record := range toDeleteRecords {
+		if record.Type == "TXT" {
+			continue
+		}
+		// Skip if the record is still found in Ingress resources of the cluster
+		if addressInList(*record.Name, ingressHostnames) {
+			fmt.Printf("Skipping record: %s found in Ingress rules hosts\n", *record.Name)
+			continue
+		}
+
+		// Delete record
+		msg := fmt.Sprintf("Deleting record: %s Type: %s", *record.Name, record.Type)
+		if dryRun {
+			msg += " (dry run)"
+		}
+		fmt.Println(msg)
+		//if !dryRun {
+		//	deleteRoute53Record(client, zoneID, record)
+		//}
+		// Delete TXT ownership records
+		for _, txt := range lookupExternalDNSTXTRecords(*record.Name, prefix, allRecords) {
+			msg := fmt.Sprintf("Deleting record: %s Type: %s", *txt.Name, txt.Type)
+			if dryRun {
+				msg += " (dry run)"
+			}
+			fmt.Println(msg)
+			//if !dryRun {
+			//	deleteRoute53Record(client, zoneID, txt)
+			//}
+		}
+	}
+	return nil
+}
+
+// ownedRoute53RecordsList expects a list of route53 records, a prefix and an
+// owner ID and will return a list of records, including TXT ones, that belong
+// to the owner ID.
+func ownedRoute53RecordsList(records []types.ResourceRecordSet, prefix, owner string) []types.ResourceRecordSet {
+	ownedRecords := []types.ResourceRecordSet{}
+	for _, record := range records {
+		if record.Type == "TXT" {
+			continue
+		}
+		owned := false
+		for _, r := range lookupExternalDNSTXTRecords(*record.Name, prefix, records) {
+			for _, rr := range r.ResourceRecords {
+				if verifyOwner(*rr.Value, owner) {
+					owned = true
+					break
+				}
+			}
+		}
+		if owned {
+			ownedRecords = append(ownedRecords, record)
+		}
+
+	}
+	return ownedRecords
+}
+
 // lookupExternalDNSTXTRecords returns all the TXT records found for a hostname
 func lookupExternalDNSTXTRecords(hostname, prefix string, records []types.ResourceRecordSet) []types.ResourceRecordSet {
 	var externalDNSRecords []types.ResourceRecordSet
@@ -138,8 +221,8 @@ func lookupExternalDNSTXTRecords(hostname, prefix string, records []types.Resour
 	if !found {
 		return externalDNSRecords
 	}
-	txtRecord := fmt.Sprintf("%s-%s", prefix, sanitizeAWSRecordAddress(hostname))
-	txtTypeRecord := fmt.Sprintf("%s-%s-%s", prefix, strings.ToLower(string(record.Type)), sanitizeAWSRecordAddress(hostname))
+	txtRecord := fmt.Sprintf("%s-%s", prefix, sanitizeDNSAddress(hostname))
+	txtTypeRecord := fmt.Sprintf("%s-%s-%s", prefix, strings.ToLower(string(record.Type)), sanitizeDNSAddress(hostname))
 	for _, record := range records {
 		if (txtRecord == *record.Name || txtTypeRecord == *record.Name) && record.Type == "TXT" {
 			externalDNSRecords = append(externalDNSRecords, record)
@@ -152,7 +235,7 @@ func lookupExternalDNSTXTRecords(hostname, prefix string, records []types.Resour
 // returns the respective record
 func verifyRecord(hostname string, records []types.ResourceRecordSet) (bool, types.ResourceRecordSet) {
 	for _, record := range records {
-		if *record.Name == sanitizeAWSRecordAddress(hostname) {
+		if *record.Name == sanitizeDNSAddress(hostname) {
 			return true, record
 		}
 	}

@@ -12,8 +12,8 @@ var (
 	flagDelete                = flag.Bool("delete", false, "Delete function will look for DNS records of an old owner and delete them. Not implemented yet")
 	flagDryRun                = flag.Bool("dry-run", true, "Whether to dry run or actually apply changes. Defaults to true")
 	flagExternalDNSOwnerIDNew = flag.String("external-dns-owner-id-new", getEnv("MIGRATOR_EXTERNAL_DNS_OWNER_ID_NEW", ""), "New ExternalDNS owner ID. Required for migration")
-	flagExternalDNSOwnerIDOld = flag.String("external-dns-owner-id-old", getEnv("MIGRATOR_EXTERNAL_DNS_OWNER_ID_OLD", ""), "ExternalDNS owner ID to be replaced. Required for migration")
-	flagExternalDNSPrefix     = flag.String("external-dns-prefix", getEnv("MIGRATOR_EXTERNAL_DNS_PREFIX", ""), "Prefix of ExternalDNS TXT records. Required for migration")
+	flagExternalDNSOwnerIDOld = flag.String("external-dns-owner-id-old", getEnv("MIGRATOR_EXTERNAL_DNS_OWNER_ID_OLD", ""), "ExternalDNS owner ID to be replaced. Required for migration and deletion")
+	flagExternalDNSPrefix     = flag.String("external-dns-prefix", getEnv("MIGRATOR_EXTERNAL_DNS_PREFIX", ""), "Prefix of ExternalDNS TXT records. Required for migration and deletion")
 	flagMigrate               = flag.Bool("migrate", false, "Migrate function will migrate owners to the a new ID")
 	flagKubeContext           = flag.String("kube-context", getEnv("MIGRATOR_KUBE_CONTEXT", ""), "Kubernetes cluster context to look for extarnal-DNS ingresses")
 	flagKubeConfigPath        = flag.String("kube-config", getEnv("MIGRATOR_KUBE_CONFIG", ""), "Path to the local kube config. If not set ~/.kube/config will be used")
@@ -56,7 +56,13 @@ func main() {
 	}
 
 	if *flagDelete {
-		log.Println("Delete function not implemented yet")
-		usage()
+		if *flagExternalDNSOwnerIDOld == "" || *flagExternalDNSPrefix == "" {
+			usage()
+		}
+		log.Println("Delete not fully supported, can only dry-run")
+		err := deleteAWSRoute53OwnerRecords(route53Client, kubeClient, *flagExternalDNSPrefix, *flagExternalDNSOwnerIDOld, *flagAWSZoneID, *flagDryRun)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }

@@ -38,3 +38,24 @@ func verifyOwner(input, owner string) bool {
 	}
 	return false
 }
+
+// sanitizeDNSAddress get an address and ensures that there is a trailing dot
+// in it
+func sanitizeDNSAddress(address string) string {
+	if !strings.HasSuffix(address, ".") {
+		return address + "."
+	}
+	return address
+}
+
+// addressInList takes an address and a list of hostnames and checks if the
+// sanitized name is found in the list
+func addressInList(address string, hostnames []string) bool {
+	a := sanitizeDNSAddress(address)
+	for _, hostname := range hostnames {
+		if a == sanitizeDNSAddress(hostname) {
+			return true
+		}
+	}
+	return false
+}

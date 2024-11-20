@@ -50,6 +50,23 @@ func ingressList(clientset *kubernetes.Clientset) ([]v1.Ingress, error) {
 	return ingressList.Items, nil
 }
 
+func allIngressHosts(clientset *kubernetes.Clientset) ([]string, error) {
+	var hostnames []string
+	ingresses, err := ingressList(clientset)
+	if err != nil {
+		return hostnames, err
+	}
+	for _, ingress := range ingresses {
+		for _, rule := range ingress.Spec.Rules {
+			if rule.Host != "" {
+				hostnames = append(hostnames, rule.Host)
+			}
+		}
+
+	}
+	return hostnames, nil
+}
+
 func externalDNSHostnames(clientset *kubernetes.Clientset) ([]string, error) {
 	var hostnames []string
 	ingresses, err := ingressList(clientset)
