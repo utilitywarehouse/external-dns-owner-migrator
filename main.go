@@ -56,11 +56,15 @@ func main() {
 	}
 
 	if *flagDelete {
+		dynamicKubeClient, err := dynamicKubeClientFromConfig(kubeConfigPath, *flagKubeContext)
+		if err != nil {
+			log.Fatalf("Cannot create dynamic Kubernetes client: %v\n", err)
+		}
 		if *flagExternalDNSOwnerIDOld == "" || *flagExternalDNSPrefix == "" {
 			usage()
 		}
 		log.Println("Delete not fully supported, can only dry-run")
-		err := deleteAWSRoute53OwnerRecords(route53Client, kubeClient, *flagExternalDNSPrefix, *flagExternalDNSOwnerIDOld, *flagAWSZoneID, *flagDryRun)
+		err = deleteAWSRoute53OwnerRecords(route53Client, kubeClient, dynamicKubeClient, *flagExternalDNSPrefix, *flagExternalDNSOwnerIDOld, *flagAWSZoneID, *flagDryRun)
 		if err != nil {
 			log.Fatal(err)
 		}

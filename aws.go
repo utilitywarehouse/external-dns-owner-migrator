@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/route53/types"
 
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -142,10 +143,22 @@ func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clien
 	return nil
 }
 
-func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes.Clientset, prefix, owner, zoneID string, dryRun bool) error {
+func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes.Clientset, dynamiKubeClient *dynamic.DynamicClient, prefix, owner, zoneID string, dryRun bool) error {
 	ingressHostnames, err := allIngressHosts(kubeClient)
 	if err != nil {
 		return fmt.Errorf("Cannot list Ingresses: %v", err)
+	}
+
+	ingressRoutes, err := ingressRouteList(dynamiKubeClient)
+	if err != nil {
+		return fmt.Errorf("Cannot list IngressRoute hosts: %v", err)
+	}
+	ingressRouteHostnames, err := extractHostnamesFromIngressRoutes(ingressRoutes)
+	if err != nil {
+		return fmt.Errorf("Cannot extract hostnames from ingress routes")
+	}
+	for _, h := range ingressRouteHostnames {
+		fmt.Println(h)
 	}
 
 	allRecords, err := route53RecordsList(client, zoneID)
@@ -164,15 +177,21 @@ func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes
 			continue
 		}
 
+		// Skip if the record is still found in an IngressRoute host
+		if addressInList(*record.Name, ingressRouteHostnames) {
+			fmt.Printf("Skipping record: %s found in IngressRoute rule hosts\n", *record.Name)
+			continue
+		}
+
 		// Delete record
 		msg := fmt.Sprintf("Deleting record: %s Type: %s", *record.Name, record.Type)
 		if dryRun {
 			msg += " (dry run)"
 		}
 		fmt.Println(msg)
-		//if !dryRun {
-		//	deleteRoute53Record(client, zoneID, record)
-		//}
+		if !dryRun {
+			deleteRoute53Record(client, zoneID, record)
+		}
 		// Delete TXT ownership records
 		for _, txt := range lookupExternalDNSTXTRecords(*record.Name, prefix, allRecords) {
 			msg := fmt.Sprintf("Deleting record: %s Type: %s", *txt.Name, txt.Type)
@@ -180,9 +199,9 @@ func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes
 				msg += " (dry run)"
 			}
 			fmt.Println(msg)
-			//if !dryRun {
-			//	deleteRoute53Record(client, zoneID, txt)
-			//}
+			if !dryRun {
+				deleteRoute53Record(client, zoneID, txt)
+			}
 		}
 	}
 	return nil
