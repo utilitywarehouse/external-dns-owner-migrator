@@ -182,19 +182,16 @@ func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes
 			fmt.Printf("Skipping record: %s found in Ingress rules hosts\n", *record.Name)
 			continue
 		}
-
 		// Skip if the record is still found in an IngressRoute host
 		if addressInList(*record.Name, ingressRouteHostnames) {
 			fmt.Printf("Skipping record: %s found in IngressRoute rule hosts\n", *record.Name)
 			continue
 		}
-
 		// Skip if the record is still found as a hostname annotation in a Service
 		if addressInList(*record.Name, serviceHostnames) {
 			fmt.Printf("Skipping record: %s found in Service as external-DNS hostname link\n", *record.Name)
 			continue
 		}
-
 		// Delete record
 		msg := fmt.Sprintf("Deleting record: %s Type: %s", *record.Name, record.Type)
 		if dryRun {
