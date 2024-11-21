@@ -41,7 +41,7 @@ func allIngressHosts(clientset *kubernetes.Clientset) ([]string, error) {
 	return hostnames, nil
 }
 
-func externalDNSHostnames(clientset *kubernetes.Clientset) ([]string, error) {
+func externalDNSIngressHostnames(clientset *kubernetes.Clientset) ([]string, error) {
 	var hostnames []string
 	ingresses, err := ingressList(clientset)
 	if err != nil {

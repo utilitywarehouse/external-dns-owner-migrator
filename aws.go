@@ -104,10 +104,15 @@ func deleteRoute53Record(client *route53.Client, zoneID string, record types.Res
 }
 
 func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clientset, prefix, oldOwner, newOwner, zoneID string, dryRun bool) error {
-	hostnames, err := externalDNSHostnames(kubeClient)
+	ingresses, err := externalDNSIngressHostnames(kubeClient)
 	if err != nil {
 		return fmt.Errorf("Cannot list Ingresses: %v", err)
 	}
+	services, err := externalDNSServiceHostnames(kubeClient)
+	if err != nil {
+		return fmt.Errorf("Cannot list Services: %v", err)
+	}
+	hostnames := append(ingresses, services...)
 
 	records, err := route53RecordsList(client, zoneID)
 	if err != nil {
@@ -157,6 +162,10 @@ func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes
 	if err != nil {
 		return fmt.Errorf("Cannot extract hostnames from ingress routes")
 	}
+	serviceHostnames, err := externalDNSServiceHostnames(kubeClient)
+	if err != nil {
+		return fmt.Errorf("Cannot list Services: %v", err)
+	}
 
 	allRecords, err := route53RecordsList(client, zoneID)
 	if err != nil {
@@ -177,6 +186,12 @@ func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes
 		// Skip if the record is still found in an IngressRoute host
 		if addressInList(*record.Name, ingressRouteHostnames) {
 			fmt.Printf("Skipping record: %s found in IngressRoute rule hosts\n", *record.Name)
+			continue
+		}
+
+		// Skip if the record is still found as a hostname annotation in a Service
+		if addressInList(*record.Name, serviceHostnames) {
+			fmt.Printf("Skipping record: %s found in Service as external-DNS hostname link\n", *record.Name)
 			continue
 		}
 
