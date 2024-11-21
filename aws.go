@@ -119,10 +119,6 @@ func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clien
 		return fmt.Errorf("Cannot list records in aws zone with ID: %s, %v", zoneID, err)
 	}
 	for _, hostname := range hostnames {
-		txtRecords := lookupExternalDNSTXTRecords(hostname, prefix, records)
-		if len(txtRecords) == 0 {
-			fmt.Printf("Could not find TXT ownership records for hostname: %s\n", hostname)
-		}
 		for _, r := range lookupExternalDNSTXTRecords(hostname, prefix, records) {
 			var newValues []string
 			for _, rr := range r.ResourceRecords {
@@ -132,8 +128,6 @@ func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clien
 						return err
 					}
 					newValues = append(newValues, r)
-				} else {
-					fmt.Printf("Could not verify ownership for hostname: %s, owner: %s\n", hostname, oldOwner)
 				}
 			}
 			if len(newValues) == 0 {
