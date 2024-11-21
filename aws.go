@@ -157,9 +157,6 @@ func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes
 	if err != nil {
 		return fmt.Errorf("Cannot extract hostnames from ingress routes")
 	}
-	for _, h := range ingressRouteHostnames {
-		fmt.Println(h)
-	}
 
 	allRecords, err := route53RecordsList(client, zoneID)
 	if err != nil {
