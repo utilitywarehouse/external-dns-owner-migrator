@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,7 +71,7 @@ func extractHostnamesFromIngressRoutes(ingressRoutes []runtime.Object) ([]string
 			if ok && match != "" {
 				hostname, err := extractHost(match)
 				if err != nil {
-					fmt.Printf("Cannot extract hostname from IngressRoute match rule: %s\n", match)
+					log.Printf("Cannot extract hostname from IngressRoute match rule: %s\n", match)
 				}
 				hostnames = append(hostnames, hostname)
 			}

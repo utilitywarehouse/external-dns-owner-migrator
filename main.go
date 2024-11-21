@@ -63,7 +63,6 @@ func main() {
 		if *flagExternalDNSOwnerIDOld == "" || *flagExternalDNSPrefix == "" {
 			usage()
 		}
-		log.Println("Delete not fully supported, can only dry-run")
 		err = deleteAWSRoute53OwnerRecords(route53Client, kubeClient, dynamicKubeClient, *flagExternalDNSPrefix, *flagExternalDNSOwnerIDOld, *flagAWSZoneID, *flagDryRun)
 		if err != nil {
 			log.Fatal(err)
