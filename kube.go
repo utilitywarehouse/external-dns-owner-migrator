@@ -41,3 +41,17 @@ func getClientConfig(path, context string) (*rest.Config, error) {
 	// uses pod's service account to get a Config
 	return rest.InClusterConfig()
 }
+
+// externalDNSKubeHostnames will return all the hostnames found in a cluster
+// that shall be managed by externalDNS
+func externalDNSKubeHostnames(kubeClient *kubernetes.Clientset) ([]string, error) {
+	ingresses, err := externalDNSIngressHostnames(kubeClient)
+	if err != nil {
+		return []string{}, fmt.Errorf("Cannot list Ingresses: %v", err)
+	}
+	services, err := externalDNSServiceHostnames(kubeClient)
+	if err != nil {
+		return []string{}, fmt.Errorf("Cannot list Services: %v", err)
+	}
+	return append(ingresses, services...), nil
+}

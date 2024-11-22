@@ -104,30 +104,25 @@ func deleteRoute53Record(client *route53.Client, zoneID string, record types.Res
 }
 
 func migrateAWSRoute53Owner(client *route53.Client, kubeClient *kubernetes.Clientset, prefix, oldOwner, newOwner, zoneID string, dryRun bool) error {
-	ingresses, err := externalDNSIngressHostnames(kubeClient)
+	hostnames, err := externalDNSKubeHostnames(kubeClient)
 	if err != nil {
-		return fmt.Errorf("Cannot list Ingresses: %v", err)
+		return err
 	}
-	services, err := externalDNSServiceHostnames(kubeClient)
-	if err != nil {
-		return fmt.Errorf("Cannot list Services: %v", err)
-	}
-	hostnames := append(ingresses, services...)
 
 	records, err := route53RecordsList(client, zoneID)
 	if err != nil {
 		return fmt.Errorf("Cannot list records in aws zone with ID: %s, %v", zoneID, err)
 	}
 	for _, hostname := range hostnames {
-		for _, r := range lookupExternalDNSTXTRecords(hostname, prefix, records) {
+		for _, r := range lookupExternalDNSRoute53TXTRecords(hostname, prefix, records) {
 			var newValues []string
 			for _, rr := range r.ResourceRecords {
 				if verifyOwner(*rr.Value, oldOwner) {
-					r, err := replaceOwner(*rr.Value, newOwner)
+					v, err := replaceOwner(*rr.Value, newOwner)
 					if err != nil {
 						return err
 					}
-					newValues = append(newValues, r)
+					newValues = append(newValues, v)
 				}
 			}
 			if len(newValues) == 0 {
@@ -202,7 +197,7 @@ func deleteAWSRoute53OwnerRecords(client *route53.Client, kubeClient *kubernetes
 			deleteRoute53Record(client, zoneID, record)
 		}
 		// Delete TXT ownership records
-		for _, txt := range lookupExternalDNSTXTRecords(*record.Name, prefix, allRecords) {
+		for _, txt := range lookupExternalDNSRoute53TXTRecords(*record.Name, prefix, allRecords) {
 			msg := fmt.Sprintf("Deleting record: %s Type: %s", *txt.Name, txt.Type)
 			if dryRun {
 				msg += " (dry run)"
@@ -226,7 +221,7 @@ func ownedRoute53RecordsList(records []types.ResourceRecordSet, prefix, owner st
 			continue
 		}
 		owned := false
-		for _, r := range lookupExternalDNSTXTRecords(*record.Name, prefix, records) {
+		for _, r := range lookupExternalDNSRoute53TXTRecords(*record.Name, prefix, records) {
 			for _, rr := range r.ResourceRecords {
 				if verifyOwner(*rr.Value, owner) {
 					owned = true
@@ -242,10 +237,10 @@ func ownedRoute53RecordsList(records []types.ResourceRecordSet, prefix, owner st
 	return ownedRecords
 }
 
-// lookupExternalDNSTXTRecords returns all the TXT records found for a hostname
-func lookupExternalDNSTXTRecords(hostname, prefix string, records []types.ResourceRecordSet) []types.ResourceRecordSet {
+// lookupExternalDNSRoute53TXTRecords returns all the TXT records found for a hostname
+func lookupExternalDNSRoute53TXTRecords(hostname, prefix string, records []types.ResourceRecordSet) []types.ResourceRecordSet {
 	var externalDNSRecords []types.ResourceRecordSet
-	found, record := verifyRecord(hostname, records)
+	found, record := verifyRoute53Record(hostname, records)
 	if !found {
 		return externalDNSRecords
 	}
@@ -259,9 +254,9 @@ func lookupExternalDNSTXTRecords(hostname, prefix string, records []types.Resour
 	return externalDNSRecords
 }
 
-// verifyRecord verifies that a hostname is in the passed list of records and
+// verifyRoute53Record verifies that a hostname is in the passed list of records and
 // returns the respective record
-func verifyRecord(hostname string, records []types.ResourceRecordSet) (bool, types.ResourceRecordSet) {
+func verifyRoute53Record(hostname string, records []types.ResourceRecordSet) (bool, types.ResourceRecordSet) {
 	for _, record := range records {
 		if *record.Name == sanitizeDNSAddress(hostname) {
 			return true, record
