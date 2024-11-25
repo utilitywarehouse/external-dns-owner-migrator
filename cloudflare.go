@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflare-go"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -94,6 +95,98 @@ func migrateCloudflareRecordOwner(api *cloudflare.API, kubeClient *kubernetes.Cl
 		}
 	}
 	return nil
+}
+
+func deleteCloudflareOwnerRecords(api *cloudflare.API, kubeClient *kubernetes.Clientset, dynamiKubeClient *dynamic.DynamicClient, prefix, owner, zoneName string, dryRun bool) error {
+	ingressHostnames, err := allIngressHosts(kubeClient)
+	if err != nil {
+		return fmt.Errorf("Cannot list Ingresses: %v", err)
+	}
+
+	ingressRoutes, err := ingressRouteList(dynamiKubeClient)
+	if err != nil {
+		return fmt.Errorf("Cannot list IngressRoute hosts: %v", err)
+	}
+	ingressRouteHostnames, err := extractHostnamesFromIngressRoutes(ingressRoutes)
+	if err != nil {
+		return fmt.Errorf("Cannot extract hostnames from ingress routes")
+	}
+	serviceHostnames, err := externalDNSServiceHostnames(kubeClient)
+	if err != nil {
+		return fmt.Errorf("Cannot list Services: %v", err)
+	}
+
+	allRecords, err := cloudflareRecordsList(api, zoneName)
+	if err != nil {
+		return fmt.Errorf("Cannot list records in cloudflare zone: %s, %v", zoneName, err)
+	}
+
+	toDeleteRecords := ownedCloudflareRecordsList(allRecords, prefix, owner)
+	for _, record := range toDeleteRecords {
+		if record.Type == "TXT" {
+			continue
+		}
+		// Skip if the record is still found in Ingress resources of the cluster
+		if addressInList(record.Name, ingressHostnames) {
+			fmt.Printf("Skipping record: %s found in Ingress rules hosts\n", record.Name)
+			continue
+		}
+		// Skip if the record is still found in an IngressRoute host
+		if addressInList(record.Name, ingressRouteHostnames) {
+			fmt.Printf("Skipping record: %s found in IngressRoute rule hosts\n", record.Name)
+			continue
+		}
+		// Skip if the record is still found as a hostname annotation in a Service
+		if addressInList(record.Name, serviceHostnames) {
+			fmt.Printf("Skipping record: %s found in Service as external-DNS hostname link\n", record.Name)
+			continue
+		}
+		// Delete record
+		msg := fmt.Sprintf("Deleting record: %s Type: %s", record.Name, record.Type)
+		if dryRun {
+			msg += " (dry run)"
+		}
+		fmt.Println(msg)
+		if !dryRun {
+			deleteCloudflareDNSRecord(api, zoneName, record)
+		}
+		// Delete TXT ownership records
+		for _, txt := range lookupExternalDNSCloudflareTXTRecords(record.Name, prefix, allRecords) {
+			msg := fmt.Sprintf("Deleting record: %s Type: %s", txt.Name, txt.Type)
+			if dryRun {
+				msg += " (dry run)"
+			}
+			fmt.Println(msg)
+			if !dryRun {
+				deleteCloudflareDNSRecord(api, zoneName, txt)
+			}
+		}
+	}
+	return nil
+}
+
+// ownedCloudflareRecordsList expects a list of route53 records, a prefix and an
+// owner ID and will return a list of records, including TXT ones, that belong
+// to the owner ID.
+func ownedCloudflareRecordsList(records []cloudflare.DNSRecord, prefix, owner string) []cloudflare.DNSRecord {
+	ownedRecords := []cloudflare.DNSRecord{}
+	for _, record := range records {
+		if record.Type == "TXT" {
+			continue
+		}
+		owned := false
+		for _, r := range lookupExternalDNSCloudflareTXTRecords(record.Name, prefix, records) {
+			if verifyOwner(r.Content, owner) {
+				owned = true
+				break
+			}
+		}
+		if owned {
+			ownedRecords = append(ownedRecords, record)
+		}
+
+	}
+	return ownedRecords
 }
 
 func lookupExternalDNSCloudflareTXTRecords(hostname, prefix string, records []cloudflare.DNSRecord) []cloudflare.DNSRecord {

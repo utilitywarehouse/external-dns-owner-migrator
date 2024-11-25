@@ -105,5 +105,18 @@ func providerCloudflare(migrate, del, dryRun bool, zoneName, oldOwnerID, newOwne
 			log.Fatal(err)
 		}
 	}
+	if del {
+		dynamicKubeClient, err := dynamicKubeClientFromConfig(kubeConfigPath, kubeContext)
+		if err != nil {
+			log.Fatalf("Cannot create dynamic Kubernetes client: %v\n", err)
+		}
+		if oldOwnerID == "" || prefix == "" {
+			usage()
+		}
+		err = deleteCloudflareOwnerRecords(cloudflareAPIClient, kubeClient, dynamicKubeClient, prefix, oldOwnerID, zoneName, dryRun)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 }
