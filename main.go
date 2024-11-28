@@ -15,8 +15,10 @@ var (
 	flagExternalDNSOwnerIDNew = flag.String("external-dns-owner-id-new", getEnv("MIGRATOR_EXTERNAL_DNS_OWNER_ID_NEW", ""), "New ExternalDNS owner ID. Required for migration")
 	flagExternalDNSOwnerIDOld = flag.String("external-dns-owner-id-old", getEnv("MIGRATOR_EXTERNAL_DNS_OWNER_ID_OLD", ""), "ExternalDNS owner ID to be replaced. Required for migration and deletion")
 	flagExternalDNSPrefix     = flag.String("external-dns-prefix", getEnv("MIGRATOR_EXTERNAL_DNS_PREFIX", ""), "Prefix of ExternalDNS TXT records. Required for migration and deletion")
+	flagGCPZoneName           = flag.String("gcp-zone-name", getEnv("MIGRATOR_GCP_ZONE_NAME", ""), "GCP DNS zone name")
+	flagGCPProjectID          = flag.String("gcp-project-id", getEnv("MIGRATOR_GCP_PROJECT_ID", ""), "GCP project id")
 	flagMigrate               = flag.Bool("migrate", false, "Migrate function will migrate owners to the a new ID")
-	flagProvider              = flag.String("provider", getEnv("MIGRATOR_PROVIDER", ""), "(required) The cloud provider of the DNS zones to manage records. [aws|cloudflare]")
+	flagProvider              = flag.String("provider", getEnv("MIGRATOR_PROVIDER", ""), "(required) The cloud provider of the DNS zones to manage records. [aws|cloudflare|gcp]")
 	flagKubeContext           = flag.String("kube-context", getEnv("MIGRATOR_KUBE_CONTEXT", ""), "Kubernetes cluster context to look for extarnal-DNS ingresses")
 	flagKubeConfigPath        = flag.String("kube-config", getEnv("MIGRATOR_KUBE_CONFIG", ""), "Path to the local kube config. If not set ~/.kube/config will be used")
 )
@@ -49,6 +51,9 @@ func main() {
 	}
 	if *flagProvider == "cloudflare" {
 		providerCloudflare(*flagMigrate, *flagDelete, *flagDryRun, *flagCloudflareZoneName, *flagExternalDNSOwnerIDOld, *flagExternalDNSOwnerIDNew, *flagExternalDNSPrefix, kubeConfigPath, *flagKubeContext)
+	}
+	if *flagProvider == "gcp" {
+		providerGCP(*flagMigrate, *flagDelete, *flagDryRun, *flagGCPZoneName, *flagGCPProjectID, *flagExternalDNSOwnerIDOld, *flagExternalDNSOwnerIDNew, *flagExternalDNSPrefix, kubeConfigPath, *flagKubeContext)
 	}
 
 }
@@ -97,7 +102,7 @@ func providerCloudflare(migrate, del, dryRun bool, zoneName, oldOwnerID, newOwne
 		log.Fatalf("Cannot create Cloudflare API client from key: %v\n", err)
 	}
 	if migrate {
-		if newOwnerID == "" || oldOwnerID == "" || prefix == "" {
+		if newOwnerID == "" || oldOwnerID == "" || prefix == "" || zoneName == "" {
 			usage()
 		}
 		err := migrateCloudflareRecordOwner(cloudflareAPIClient, kubeClient, prefix, oldOwnerID, newOwnerID, zoneName, dryRun)
@@ -110,10 +115,44 @@ func providerCloudflare(migrate, del, dryRun bool, zoneName, oldOwnerID, newOwne
 		if err != nil {
 			log.Fatalf("Cannot create dynamic Kubernetes client: %v\n", err)
 		}
-		if oldOwnerID == "" || prefix == "" {
+		if oldOwnerID == "" || prefix == "" || zoneName == "" {
 			usage()
 		}
 		err = deleteCloudflareOwnerRecords(cloudflareAPIClient, kubeClient, dynamicKubeClient, prefix, oldOwnerID, zoneName, dryRun)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+}
+
+func providerGCP(migrate, del, dryRun bool, zoneName, projectID, oldOwnerID, newOwnerID, prefix, kubeConfigPath, kubeContext string) {
+	kubeClient, err := kubeClientFromConfig(kubeConfigPath, kubeContext)
+	if err != nil {
+		log.Fatalf("Cannot create Kubernetes client: %v\n", err)
+	}
+	client, err := newGCPDNSClient()
+	if err != nil {
+		log.Fatalf("Cannot create GCP client: %v\n", err)
+	}
+	if migrate {
+		if newOwnerID == "" || oldOwnerID == "" || prefix == "" || zoneName == "" || projectID == "" {
+			usage()
+		}
+		err := migrateGCPDNSOwner(client, kubeClient, prefix, oldOwnerID, newOwnerID, projectID, zoneName, dryRun)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	if del {
+		dynamicKubeClient, err := dynamicKubeClientFromConfig(kubeConfigPath, kubeContext)
+		if err != nil {
+			log.Fatalf("Cannot create dynamic Kubernetes client: %v\n", err)
+		}
+		if oldOwnerID == "" || prefix == "" || zoneName == "" || projectID == "" {
+			usage()
+		}
+		err = deleteGCPDNSOwnerRecords(client, kubeClient, dynamicKubeClient, prefix, oldOwnerID, projectID, zoneName, dryRun)
 		if err != nil {
 			log.Fatal(err)
 		}
