@@ -10,7 +10,7 @@ require (
 	github.com/cloudflare/cloudflare-go v0.115.0
 	google.golang.org/api v0.214.0
 	k8s.io/api v0.32.0
-	k8s.io/apimachinery v0.32.0
+	k8s.io/apimachinery v0.32.1
 	k8s.io/client-go v0.32.0
 )
 
