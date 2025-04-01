@@ -6,7 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.29.8
-	github.com/aws/aws-sdk-go-v2/service/route53 v1.49.0
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.50.0
 	github.com/cloudflare/cloudflare-go v0.115.0
 	google.golang.org/api v0.228.0
 	k8s.io/api v0.32.2
