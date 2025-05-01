@@ -1,7 +1,6 @@
 module github.com/utilitywarehouse/external-dns-owner-migrator
 
 go 1.23.0
-
 toolchain go1.24.1
 
 require (
@@ -10,7 +9,7 @@ require (
 	github.com/cloudflare/cloudflare-go v0.115.0
 	google.golang.org/api v0.228.0
 	k8s.io/api v0.32.3
-	k8s.io/apimachinery v0.32.3
+	k8s.io/apimachinery v0.33.0
 	k8s.io/client-go v0.32.3
 )
 
@@ -45,7 +44,6 @@ require (
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
