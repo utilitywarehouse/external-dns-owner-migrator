@@ -1,6 +1,7 @@
 module github.com/utilitywarehouse/external-dns-owner-migrator
 
-go 1.23.0
+go 1.24.0
+
 toolchain go1.24.1
 
 require (
@@ -9,7 +10,7 @@ require (
 	github.com/cloudflare/cloudflare-go v0.115.0
 	google.golang.org/api v0.231.0
 	k8s.io/api v0.33.0
-	k8s.io/apimachinery v0.33.0
+	k8s.io/apimachinery v0.33.1
 	k8s.io/client-go v0.33.0
 )
 
