@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.62.2
 	github.com/cloudflare/cloudflare-go v0.116.0
 	google.golang.org/api v0.269.0
-	k8s.io/api v0.35.2
+	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.2
 )
