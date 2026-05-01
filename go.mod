@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.17
-	github.com/aws/aws-sdk-go-v2/service/route53 v1.62.5
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.62.7
 	github.com/cloudflare/cloudflare-go v0.116.0
 	google.golang.org/api v0.277.0
 	k8s.io/api v0.36.0
